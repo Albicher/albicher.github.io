@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BS Options Calculator</title>
+</head>
+<body style="font-family: Arial; margin: 30px; background-color: #f0f0f0;">
+
+<h2>Black-Scholes Options Calculator</h2>
+<p>Fill in the parameters and click Calculate:</p>
+<hr>
+
+<p>Stock Price (S): <input type="number" id="stock" value="100" step="any"> <small>currency units</small></p>
+<p>Strike Price (K): <input type="number" id="strike" value="105" step="any"> <small>currency units</small></p>
+<p>Time to Maturity (T): <input type="number" id="time" value="1" step="any"> <small>in years, 0.25 = 3 months</small></p>
+<p>Risk Free Rate (r): <input type="number" id="rate" value="0.05" step="any"> <small>0.05 = 5%</small></p>
+<p>Volatility (sigma): <input type="number" id="vol" value="0.25" step="any"> <small>0.20 = 20%</small></p>
+
+<br>
+<button onclick="runCalc()">Calculate</button>
+<hr>
+
+<h3>Prices:</h3>
+<table border="1" cellpadding="6" style="border-collapse: collapse;">
+    <tr style="background-color: #ddd;"><th>Type</th><th>Price</th></tr>
+    <tr><td>Call</td><td>$<span id="call_result">0.00</span></td></tr>
+    <tr><td>Put</td><td>$<span id="put_result">0.00</span></td></tr>
+</table>
+
+<h3>Greeks:</h3>
+<table border="1" cellpadding="6" style="border-collapse: collapse;">
+    <tr style="background-color: #ddd;"><th>Greek</th><th>Value</th><th>Note</th></tr>
+    <tr><td>Delta Call</td><td><span id="gDC">0</span></td><td><small>between 0 and 1</small></td></tr>
+    <tr><td>Delta Put</td><td><span id="gDP">0</span></td><td><small>between -1 and 0</small></td></tr>
+    <tr><td>Gamma</td><td><span id="gG">0</span></td><td><small>same for call and put</small></td></tr>
+    <tr><td>Vega</td><td><span id="gV">0</span></td><td><small>per 1% move in vol</small></td></tr>
+    <tr><td>Theta Call</td><td><span id="gTC">0</span></td><td><small>per day, usually negative</small></td></tr>
+    <tr><td>Theta Put</td><td><span id="gTP">0</span></td><td><small>per day</small></td></tr>
+</table>
+
+<h3>Payoff at Expiration:</h3>
+<canvas id="chartPayoff" width="500" height="250" style="background:white; border:1px solid #ccc;"></canvas>
+
+<h3>Delta vs Spot:</h3>
+<canvas id="chartDelta" width="500" height="250" style="background:white; border:1px solid #ccc;"></canvas>
+
+<br><br>
+<small style="color:#aaa;">Albicher IBRAHIM &nbsp; EDHEC Business School</small>
+
+<script>
+
+// found this approximation online, JS has no built in norm.cdf
+// its accurate enough for our purposes
+function normcdf(x) {
+var t = 1 / (1 + 0.2316419 * Math.abs(x));
+var d = 0.3989423 * Math.exp(-x*x/2);
+var p = d*t*(0.3193815 + t*(-0.3565638 + t*(1.781478 + t*(-1.821256 + t*1.330274))));
+if (x > 0) return 1 - p;
+return p;
+}
+
+function normpdf(x) {
+    return Math.exp(-0.5*x*x) / Math.sqrt(2*3.14159265358979);
+}
+
+function runCalc() {
+var spot = parseFloat(document.getElementById('stock').value);
+var strike = parseFloat(document.getElementById('strike').value);
+var mat = parseFloat(document.getElementById('time').value);
+var rf = parseFloat(document.getElementById('rate').value);
+var vol = parseFloat(document.getElementById('vol').value);
+
+if (!spot || !strike || !mat || !vol || spot<=0 || strike<=0 || mat<=0 || vol<=0) {
+    alert('check your inputs');
+    return;
+}
+
+// Black Scholes 1973 formula
+var d1 = (Math.log(spot/strike) + (rf + 0.5*vol*vol)*mat) / (vol*Math.sqrt(mat));
+var d2 = d1 - vol*Math.sqrt(mat);
+
+var callPx = spot*normcdf(d1) - strike*Math.exp(-rf*mat)*normcdf(d2);
+var putPx = strike*Math.exp(-rf*mat)*normcdf(-d2) - spot*normcdf(-d1);
+
+// greeks
+var dc = normcdf(d1);
+var dp = dc - 1;
+var gam = normpdf(d1) / (spot*vol*Math.sqrt(mat));
+var vega = spot*normpdf(d1)*Math.sqrt(mat)/100;
+// theta is negative most of the time, thats normal
+var tc = (-(spot*normpdf(d1)*vol)/(2*Math.sqrt(mat)) - rf*strike*Math.exp(-rf*mat)*normcdf(d2)) / 365;
+var tp = (-(spot*normpdf(d1)*vol)/(2*Math.sqrt(mat)) + rf*strike*Math.exp(-rf*mat)*normcdf(-d2)) / 365;
+
+document.getElementById('call_result').innerText = callPx.toFixed(4);
+document.getElementById('put_result').innerText = putPx.toFixed(4);
+document.getElementById('gDC').innerText = dc.toFixed(4);
+document.getElementById('gDP').innerText = dp.toFixed(4);
+document.getElementById('gG').innerText = gam.toFixed(6);
+document.getElementById('gV').innerText = vega.toFixed(4);
+document.getElementById('gTC').innerText = tc.toFixed(4);
+document.getElementById('gTP').innerText = tp.toFixed(4);
+
+drawPayoff(spot, strike);
+drawDelta(spot, strike, mat, rf, vol);
+}
+
+function drawPayoff(spot, strike) {
+var cv = document.getElementById('chartPayoff');
+var ctx = cv.getContext('2d');
+ctx.clearRect(0,0,cv.width,cv.height);
+
+var w=cv.width, h=cv.height, pad=40;
+var lo=spot*0.5, hi=spot*1.5;
+var maxv = hi - strike > strike - lo ? hi-strike : strike-lo;
+if (maxv<=0) maxv=10;
+
+function px(s){ return pad+(s-lo)/(hi-lo)*(w-2*pad); }
+function py(v){ return h-pad-(v/maxv)*(h-2*pad); }
+
+// draw axes
+ctx.strokeStyle='#999';
+ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,h-pad); ctx.lineTo(w-pad,h-pad); ctx.stroke();
+
+// call line
+ctx.strokeStyle='#378ADD'; ctx.lineWidth=2; ctx.beginPath();
+for (var i=0;i<=200;i++){
+    var s=lo+i*(hi-lo)/200;
+    var v=s-strike>0?s-strike:0;
+    if(i==0) ctx.moveTo(px(s),py(v)); else ctx.lineTo(px(s),py(v));
+}
+ctx.stroke();
+
+// put line
+ctx.strokeStyle='#D85A30'; ctx.beginPath();
+for (var i=0;i<=200;i++){
+    var s=lo+i*(hi-lo)/200;
+    var v=strike-s>0?strike-s:0;
+    if(i==0) ctx.moveTo(px(s),py(v)); else ctx.lineTo(px(s),py(v));
+}
+ctx.stroke();
+
+// strike
+ctx.strokeStyle='#bbb'; ctx.setLineDash([4,4]);
+ctx.beginPath(); ctx.moveTo(px(strike),pad); ctx.lineTo(px(strike),h-pad); ctx.stroke();
+ctx.setLineDash([]);
+
+ctx.font='11px Arial';
+ctx.fillStyle='#555'; ctx.fillText('K='+strike, px(strike)+4, pad+12);
+ctx.fillStyle='#378ADD'; ctx.fillText('Call', w-pad-28, py((hi-strike)*0.7));
+ctx.fillStyle='#D85A30'; ctx.fillText('Put', pad+4, py((strike-lo)*0.7));
+}
+
+function drawDelta(spot, strike, mat, rf, vol) {
+var cv = document.getElementById('chartDelta');
+var ctx = cv.getContext('2d');
+ctx.clearRect(0,0,cv.width,cv.height);
+
+var w=cv.width, h=cv.height, pad=40;
+var lo=spot*0.5, hi=spot*1.5;
+
+function px(s){ return pad+(s-lo)/(hi-lo)*(w-2*pad); }
+function py(v){ return h-pad-((v+1)/2)*(h-2*pad); }
+
+ctx.strokeStyle='#999';
+ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,h-pad); ctx.lineTo(w-pad,h-pad); ctx.stroke();
+
+// zero line
+ctx.strokeStyle='#eee';
+ctx.beginPath(); ctx.moveTo(pad,py(0)); ctx.lineTo(w-pad,py(0)); ctx.stroke();
+
+ctx.strokeStyle='#378ADD'; ctx.lineWidth=2; ctx.beginPath();
+for (var i=0;i<=200;i++){
+    var s=lo+i*(hi-lo)/200;
+    var d1=(Math.log(s/strike)+(rf+0.5*vol*vol)*mat)/(vol*Math.sqrt(mat));
+    if(i==0) ctx.moveTo(px(s),py(normcdf(d1))); else ctx.lineTo(px(s),py(normcdf(d1)));
+}
+ctx.stroke();
+
+ctx.strokeStyle='#D85A30'; ctx.beginPath();
+for (var i=0;i<=200;i++){
+    var s=lo+i*(hi-lo)/200;
+    var d1=(Math.log(s/strike)+(rf+0.5*vol*vol)*mat)/(vol*Math.sqrt(mat));
+    if(i==0) ctx.moveTo(px(s),py(normcdf(d1)-1)); else ctx.lineTo(px(s),py(normcdf(d1)-1));
+}
+ctx.stroke();
+
+ctx.font='11px Arial';
+ctx.fillStyle='#378ADD'; ctx.fillText('Delta Call', w-pad-60, pad+14);
+ctx.fillStyle='#D85A30'; ctx.fillText('Delta Put', pad+4, h-pad-8);
+}
+
+</script>
+</body>
+</html>
