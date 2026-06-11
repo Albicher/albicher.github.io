@@ -37,6 +37,18 @@
     <tr><td>Theta Put</td><td><span id="gTP">0</span></td><td><small>per day</small></td></tr>
 </table>
 
+<h3>Put-Call Parity Check:</h3>
+<table border="1" cellpadding="6" style="border-collapse: collapse;">
+    <tr style="background-color: #ddd;"><th>C - P</th><th>S - K*e^(-rT)</th><th>Difference</th><th>Status</th></tr>
+    <tr>
+        <td><span id="pcp_left">0</span></td>
+        <td><span id="pcp_right">0</span></td>
+        <td><span id="pcp_diff">0</span></td>
+        <td><span id="pcp_status">-</span></td>
+    </tr>
+</table>
+<p><small>Put-call parity: C - P = S - K*e^(-rT). Difference should be ~0 if prices are consistent.</small></p>
+
 <h3>Payoff at Expiration:</h3>
 <canvas id="chartPayoff" width="500" height="250" style="background:white; border:1px solid #ccc;"></canvas>
 
@@ -98,6 +110,15 @@ document.getElementById('gG').innerText = gam.toFixed(6);
 document.getElementById('gV').innerText = vega.toFixed(4);
 document.getElementById('gTC').innerText = tc.toFixed(4);
 document.getElementById('gTP').innerText = tp.toFixed(4);
+
+// put-call parity check: C - P = S - K*e^(-rT)
+var lhs = callPx - putPx;
+var rhs = spot - strike*Math.exp(-rf*mat);
+var diff = Math.abs(lhs - rhs);
+document.getElementById('pcp_left').innerText = lhs.toFixed(6);
+document.getElementById('pcp_right').innerText = rhs.toFixed(6);
+document.getElementById('pcp_diff').innerText = diff.toFixed(6);
+document.getElementById('pcp_status').innerText = diff < 0.0001 ? 'OK' : 'check inputs';
 
 drawPayoff(spot, strike);
 drawDelta(spot, strike, mat, rf, vol);
